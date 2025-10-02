@@ -10,6 +10,10 @@ interface ProcessedImage {
 export default function WatermarkPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [watermarkImage, setWatermarkImage] = useState<File | null>(null);
+  const [watermarkText, setWatermarkText] = useState<string>('');
+  const [watermarkType, setWatermarkType] = useState<'image' | 'text'>('image');
+  const [fontSize, setFontSize] = useState<number>(40);
+  const [textColor, setTextColor] = useState<string>('#ffffff');
   const [position, setPosition] = useState<string>('bottom-right');
   const [opacity, setOpacity] = useState<number>(0.5);
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
@@ -44,8 +48,69 @@ export default function WatermarkPage() {
           // Vẽ ảnh gốc
           ctx.drawImage(img, 0, 0);
 
+          ctx.globalAlpha = opacity;
+
+          // Thêm watermark text
+          if (watermarkType === 'text' && watermarkText) {
+            const lines = watermarkText.split('\n');
+            const lineHeight = fontSize * 1.2;
+            const totalHeight = lines.length * lineHeight;
+
+            ctx.font = `${fontSize}px Arial`;
+            ctx.fillStyle = textColor;
+            ctx.strokeStyle = textColor === '#ffffff' ? '#000000' : '#ffffff';
+            ctx.lineWidth = 2;
+
+            // Tính toán vị trí x, y cho text
+            const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+            let x = img.width - maxWidth - 20;
+            let y = 20;
+
+            switch(position) {
+              case 'top-left':
+                x = 20;
+                y = 20;
+                break;
+              case 'top-right':
+                x = img.width - maxWidth - 20;
+                y = 20;
+                break;
+              case 'bottom-left':
+                x = 20;
+                y = img.height - totalHeight - 20;
+                break;
+              case 'bottom-right':
+                x = img.width - maxWidth - 20;
+                y = img.height - totalHeight - 20;
+                break;
+              case 'center':
+                x = (img.width - maxWidth) / 2;
+                y = (img.height - totalHeight) / 2;
+                break;
+            }
+
+            // Vẽ từng dòng text
+            lines.forEach((line, index) => {
+              const yPos = y + (index + 1) * lineHeight;
+              ctx.strokeText(line, x, yPos);
+              ctx.fillText(line, x, yPos);
+            });
+
+            ctx.globalAlpha = 1;
+
+            canvas.toBlob((blob) => {
+              if (blob) {
+                const url = URL.createObjectURL(blob);
+                resolve({
+                  original: URL.createObjectURL(file),
+                  processed: url,
+                  name: file.name
+                });
+              }
+            });
+          }
           // Thêm watermark image
-          if (watermarkImage) {
+          else if (watermarkType === 'image' && watermarkImage) {
             const wmReader = new FileReader();
             wmReader.onload = (wmE) => {
               const wmImg = new Image();
@@ -79,7 +144,6 @@ export default function WatermarkPage() {
                     break;
                 }
 
-                ctx.globalAlpha = opacity;
                 ctx.drawImage(wmImg, x, y, wmWidth, wmHeight);
                 ctx.globalAlpha = 1;
 
@@ -98,6 +162,7 @@ export default function WatermarkPage() {
             };
             wmReader.readAsDataURL(watermarkImage);
           } else {
+            ctx.globalAlpha = 1;
             canvas.toBlob((blob) => {
               if (blob) {
                 const url = URL.createObjectURL(blob);
@@ -269,22 +334,131 @@ export default function WatermarkPage() {
               fontWeight: '600',
               color: '#333'
             }}>
-              Chọn ảnh watermark:
+              Loại watermark:
             </label>
-            <input
-              ref={watermarkInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleWatermarkImageChange}
-              style={{
-                width: '100%',
-                padding: '15px',
-                border: '2px dashed #ddd',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px'
-              }}
-            />
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  value="image"
+                  checked={watermarkType === 'image'}
+                  onChange={(e) => setWatermarkType('image')}
+                  style={{ marginRight: '8px' }}
+                />
+                Ảnh
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  value="text"
+                  checked={watermarkType === 'text'}
+                  onChange={(e) => setWatermarkType('text')}
+                  style={{ marginRight: '8px' }}
+                />
+                Text
+              </label>
+            </div>
+
+            {watermarkType === 'image' ? (
+              <>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '10px',
+                  fontWeight: '600',
+                  color: '#333'
+                }}>
+                  Chọn ảnh watermark:
+                </label>
+                <input
+                  ref={watermarkInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleWatermarkImageChange}
+                  style={{
+                    width: '100%',
+                    padding: '15px',
+                    border: '2px dashed #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '10px',
+                  fontWeight: '600',
+                  color: '#333'
+                }}>
+                  Nhập text watermark (nhiều dòng):
+                </label>
+                <textarea
+                  value={watermarkText}
+                  onChange={(e) => setWatermarkText(e.target.value)}
+                  placeholder="Nhập text watermark&#10;Có thể nhiều dòng"
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '15px',
+                    border: '2px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    fontFamily: 'Arial, sans-serif',
+                    resize: 'vertical'
+                  }}
+                />
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '20px',
+                  marginTop: '20px'
+                }}>
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '10px',
+                      fontWeight: '600',
+                      color: '#333'
+                    }}>
+                      Kích thước chữ: {fontSize}px
+                    </label>
+                    <input
+                      type="range"
+                      min="20"
+                      max="150"
+                      step="5"
+                      value={fontSize}
+                      onChange={(e) => setFontSize(parseInt(e.target.value))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '10px',
+                      fontWeight: '600',
+                      color: '#333'
+                    }}>
+                      Màu chữ:
+                    </label>
+                    <input
+                      type="color"
+                      value={textColor}
+                      onChange={(e) => setTextColor(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{
@@ -345,15 +519,26 @@ export default function WatermarkPage() {
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
             <button
               onClick={processAllImages}
-              disabled={files.length === 0 || processing}
+              disabled={
+                files.length === 0 ||
+                processing ||
+                (watermarkType === 'image' && !watermarkImage) ||
+                (watermarkType === 'text' && !watermarkText)
+              }
               style={{
-                background: files.length === 0 || processing ? '#ccc' : '#333',
+                background: files.length === 0 ||
+                  processing ||
+                  (watermarkType === 'image' && !watermarkImage) ||
+                  (watermarkType === 'text' && !watermarkText) ? '#ccc' : '#333',
                 color: 'white',
                 border: 'none',
                 padding: '12px 32px',
                 fontSize: '16px',
                 borderRadius: '4px',
-                cursor: files.length === 0 || processing ? 'not-allowed' : 'pointer',
+                cursor: files.length === 0 ||
+                  processing ||
+                  (watermarkType === 'image' && !watermarkImage) ||
+                  (watermarkType === 'text' && !watermarkText) ? 'not-allowed' : 'pointer',
                 fontWeight: '500'
               }}
             >
